@@ -11,6 +11,30 @@ if ($_SESSION['user_role'] != 'admin') {
 $success = '';
 $error = '';
 
+// Handle branch deletion
+if (isset($_GET['action']) && $_GET['action'] == 'delete' && isset($_GET['id'])) {
+    try {
+        $branch_id = (int)$_GET['id'];
+        $stmt = $pdo->prepare("DELETE FROM branches WHERE id = ?");
+        $stmt->execute([$branch_id]);
+        $success = "Branch deleted successfully!";
+    } catch (PDOException $e) {
+        $error = "Error deleting branch: " . $e->getMessage();
+    }
+}
+
+// Handle status toggle
+if (isset($_GET['action']) && $_GET['action'] == 'toggle_status' && isset($_GET['id'])) {
+    try {
+        $branch_id = (int)$_GET['id'];
+        $stmt = $pdo->prepare("UPDATE branches SET status = IF(status = 'active', 'inactive', 'active') WHERE id = ?");
+        $stmt->execute([$branch_id]);
+        $success = "Branch status updated successfully!";
+    } catch (PDOException $e) {
+        $error = "Error updating status: " . $e->getMessage();
+    }
+}
+
 // Handle branch addition
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $branch_name = $_POST['branch_name'] ?? '';
@@ -39,12 +63,16 @@ $search = $_GET['search'] ?? '';
 $date_from = $_GET['date_from'] ?? '';
 $date_to = $_GET['date_to'] ?? '';
 
-// Build query for branches
-$query = "SELECT * FROM branches WHERE 1=1";
+// Build query for branches with staff count
+$query = "SELECT b.*, 
+          COALESCE(COUNT(DISTINCT u.id), 0) as staff_count
+          FROM branches b
+          LEFT JOIN users u ON u.branch_id = b.id AND u.role != 'customer'
+          WHERE 1=1";
 $params = [];
 
 if (!empty($search)) {
-    $query .= " AND (name LIKE ? OR city LIKE ? OR address LIKE ?)";
+    $query .= " AND (b.name LIKE ? OR b.city LIKE ? OR b.address LIKE ?)";
     $searchParam = "%$search%";
     $params[] = $searchParam;
     $params[] = $searchParam;
@@ -52,16 +80,16 @@ if (!empty($search)) {
 }
 
 if (!empty($date_from)) {
-    $query .= " AND DATE(created_at) >= ?";
+    $query .= " AND DATE(b.created_at) >= ?";
     $params[] = $date_from;
 }
 
 if (!empty($date_to)) {
-    $query .= " AND DATE(created_at) <= ?";
+    $query .= " AND DATE(b.created_at) <= ?";
     $params[] = $date_to;
 }
 
-$query .= " ORDER BY id DESC";
+$query .= " GROUP BY b.id ORDER BY b.id DESC";
 
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
@@ -196,6 +224,9 @@ $branches = $stmt->fetchAll();
                             <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">City</th>
                             <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Address</th>
                             <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Phone</th>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Staff</th>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Status</th>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Created</th>
                             <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Actions</th>
                         </tr>
                     </thead>
@@ -207,14 +238,32 @@ $branches = $stmt->fetchAll();
                                 <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);"><?= htmlspecialchars($branch->address ?? 'N/A') ?></td>
                                 <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);"><?= htmlspecialchars($branch->phone ?? 'N/A') ?></td>
                                 <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
-                                    <a href="view_branch.php?id=<?= $branch->id ?>" style="color: var(--info); text-decoration: none; margin-right: 1rem; cursor: pointer;">
+                                    <span style="background: rgba(59, 130, 246, 0.2); color: var(--info); padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.875rem;">
+                                        <?= (int)$branch->staff_count ?> staff
+                                    </span>
+                                </td>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+                                    <a href="branches.php?action=toggle_status&id=<?= $branch->id ?>" style="text-decoration: none;">
+                                        <span style="background: <?= ($branch->status ?? 'active') === 'active' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)' ?>; color: <?= ($branch->status ?? 'active') === 'active' ? 'var(--success)' : 'var(--danger)' ?>; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.875rem; cursor: pointer;">
+                                            <?= ucfirst($branch->status ?? 'active') ?>
+                                        </span>
+                                    </a>
+                                </td>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.875rem;">
+                                    <?= isset($branch->created_at) ? date('M d, Y', strtotime($branch->created_at)) : 'N/A' ?>
+                                </td>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+                                    <a href="view_branch.php?id=<?= $branch->id ?>" style="color: var(--info); text-decoration: none; margin-right: 0.75rem; cursor: pointer; font-size: 0.875rem;">
                                         <i class="fa-solid fa-eye"></i> View
                                     </a>
-                                    <a href="edit_branch.php?id=<?= $branch->id ?>" style="color: var(--accent); text-decoration: none; margin-right: 1rem; cursor: pointer;">
+                                    <a href="edit_branch.php?id=<?= $branch->id ?>" style="color: var(--accent); text-decoration: none; margin-right: 0.75rem; cursor: pointer; font-size: 0.875rem;">
                                         <i class="fa-solid fa-edit"></i> Edit
                                     </a>
-                                    <a href="manage_branch.php?id=<?= $branch->id ?>" style="color: var(--warning); text-decoration: none; cursor: pointer;">
+                                    <a href="manage_branch.php?id=<?= $branch->id ?>" style="color: var(--warning); text-decoration: none; margin-right: 0.75rem; cursor: pointer; font-size: 0.875rem;">
                                         <i class="fa-solid fa-sliders"></i> Manage
+                                    </a>
+                                    <a href="javascript:void(0)" onclick="deleteBranch(<?= $branch->id ?>, '<?= htmlspecialchars($branch->name) ?>')" style="color: var(--danger); text-decoration: none; cursor: pointer; font-size: 0.875rem;">
+                                        <i class="fa-solid fa-trash"></i> Delete
                                     </a>
                                 </td>
                             </tr>
@@ -241,6 +290,12 @@ $branches = $stmt->fetchAll();
             if (dateTo) params.append('date_to', dateTo);
             
             window.location.href = `branches.php?${params.toString()}`;
+        }
+        
+        function deleteBranch(id, name) {
+            if (confirm(`Are you sure you want to delete the branch "${name}"? This action cannot be undone.`)) {
+                window.location.href = `branches.php?action=delete&id=${id}`;
+            }
         }
         
         // Allow Enter key to trigger filter
