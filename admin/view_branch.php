@@ -1,0 +1,236 @@
+<?php
+require_once '../config/db.php';
+require_once '../includes/auth_check.php';
+
+// Only allow admin and manager
+if ($_SESSION['user_role'] != 'admin' && $_SESSION['user_role'] != 'manager') {
+    header("Location: ../login.php");
+    exit;
+}
+
+$id = $_GET['id'] ?? null;
+if (!$id) {
+    header("Location: branches.php");
+    exit;
+}
+
+// Fetch branch details
+try {
+    $stmt = $pdo->prepare("SELECT * FROM branches WHERE id = ?");
+    $stmt->execute([$id]);
+    $branch = $stmt->fetch();
+    
+    if (!$branch) {
+        header("Location: branches.php");
+        exit;
+    }
+} catch (Exception $e) {
+    header("Location: branches.php");
+    exit;
+}
+
+// Fetch staff assigned to this branch
+try {
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE branch_id = ? ORDER BY name ASC");
+    $stmt->execute([$id]);
+    $staff = $stmt->fetchAll();
+} catch (Exception $e) {
+    $staff = [];
+}
+
+// Fetch vehicles assigned to this branch
+try {
+    $stmt = $pdo->prepare("SELECT * FROM vehicles WHERE branch_id = ? ORDER BY license_plate ASC");
+    $stmt->execute([$id]);
+    $vehicles = $stmt->fetchAll();
+} catch (Exception $e) {
+    $vehicles = [];
+}
+
+// Fetch shipments statistics
+try {
+    $stmt = $pdo->prepare("SELECT COUNT(*) as total FROM shipments WHERE pickup_branch_id = ? OR delivery_branch_id = ?");
+    $stmt->execute([$id, $id]);
+    $shipment_stats = $stmt->fetch();
+} catch (Exception $e) {
+    $shipment_stats = (object) ['total' => 0];
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Branch - MurgLogistics</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/dashboard.css">
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <a href="index.php" class="brand">
+            <i class="fa-solid fa-truck-fast"></i> MurgLogistics
+        </a>
+        
+        <ul class="nav-links">
+            <li><a href="index.php"><i class="fa-solid fa-chart-pie"></i> Dashboard</a></li>
+            <li><a href="create_shipment.php"><i class="fa-solid fa-box"></i> Shipments</a></li>
+            <li><a href="vehicles.php"><i class="fa-solid fa-truck"></i> Fleet & Vehicles</a></li>
+            <li><a href="drivers.php"><i class="fa-solid fa-users"></i> Staff & Drivers</a></li>
+            <?php if($_SESSION['user_role'] == 'admin'): ?>
+                <li><a href="branches.php" class="active"><i class="fa-solid fa-building"></i> Branches</a></li>
+            <?php endif; ?>
+        </ul>
+
+        <div class="logout-container">
+            <a href="../logout.php" class="logout-btn">
+                <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="header">
+            <div>
+                <h1>Branch Details</h1>
+                <p style="color: var(--text-muted); margin-top: 5px;">Complete branch information and assigned resources</p>
+            </div>
+            <div style="margin-top: 1rem;">
+                <a href="branches.php" style="color: var(--accent); text-decoration: none; cursor: pointer;">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Branches
+                </a>
+            </div>
+        </header>
+
+        <!-- Branch Overview -->
+        <div class="table-container" style="margin-bottom: 2rem;">
+            <div class="table-header">
+                <h2>Branch Information</h2>
+                <div>
+                    <a href="edit_branch.php?id=<?= $branch->id ?>" style="text-decoration: none; padding: 0.5rem 1rem; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer;">
+                        <i class="fa-solid fa-edit"></i> Edit
+                    </a>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; padding: 1.5rem;">
+                <div>
+                    <h3 style="color: var(--text-muted); margin-bottom: 1rem;">Basic Information</h3>
+                    <div style="display: grid; gap: 0.75rem;">
+                        <div><strong>Name:</strong> <?= htmlspecialchars($branch->name) ?></div>
+                        <div><strong>City:</strong> <?= htmlspecialchars($branch->city) ?></div>
+                        <div><strong>Address:</strong> <?= htmlspecialchars($branch->address) ?></div>
+                        <div><strong>Phone:</strong> <?= htmlspecialchars($branch->phone ?? 'N/A') ?></div>
+                        <div><strong>Contact:</strong> <?= htmlspecialchars($branch->contact_number ?? 'N/A') ?></div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 style="color: var(--text-muted); margin-bottom: 1rem;">Statistics</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div style="background: rgba(99, 102, 241, 0.1); padding: 1rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent);"><?= count($staff) ?></div>
+                            <div style="color: var(--text-muted);">Staff Members</div>
+                        </div>
+                        <div style="background: rgba(16, 185, 129, 0.1); padding: 1rem; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 1.5rem; font-weight: bold; color: var(--success);"><?= $shipment_stats->total ?></div>
+                            <div style="color: var(--text-muted);">Total Shipments</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem; color: var(--text-muted);">
+                        <small>Created: <?= date('M d, Y', strtotime($branch->created_at)) ?></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Staff Members -->
+        <div class="table-container" style="margin-bottom: 2rem;">
+            <div class="table-header">
+                <h2>Assigned Staff Members</h2>
+            </div>
+            
+            <?php if (count($staff) > 0): ?>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Name</th>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Email</th>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Role</th>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($staff as $member): ?>
+                            <tr>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);"><?= htmlspecialchars($member->name) ?></td>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);"><?= htmlspecialchars($member->email) ?></td>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+                                    <span style="background-color: var(--accent); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">
+                                        <?= ($member->role == 'manager' ? 'Staff' : ucfirst(htmlspecialchars($member->role))) ?>
+                                    </span>
+                                </td>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+                                    <span style="background-color: <?= ($member->status ?? 'active') == 'active' ? 'var(--success)' : 'var(--danger)' ?>; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">
+                                        <?= ($member->status ?? 'active') == 'active' ? 'Active' : 'Inactive' ?>
+                                    </span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <p style="color: var(--text-muted); text-align: center; padding: 2rem 0;">
+                    No staff assigned to this branch yet.
+                </p>
+            <?php endif; ?>
+        </div>
+
+        <!-- Vehicles -->
+        <div class="table-container" style="margin-bottom: 2rem;">
+            <div class="table-header">
+                <h2>Assigned Vehicles</h2>
+            </div>
+            
+            <?php if (count($vehicles) > 0): ?>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">License Plate</th>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Type</th>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Capacity</th>
+                            <th style="padding: 1rem; text-align: left; color: var(--text-muted); font-weight: 500; border-bottom: 1px solid var(--border-color);">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($vehicles as $vehicle): ?>
+                            <tr>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);"><?= htmlspecialchars($vehicle->license_plate) ?></td>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);"><?= htmlspecialchars($vehicle->type) ?></td>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);"><?= $vehicle->capacity ?> tons</td>
+                                <td style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+                                    <span style="background-color: 
+                                        <?php 
+                                            if ($vehicle->status == 'available') echo 'var(--success)';
+                                            elseif ($vehicle->status == 'en_route') echo 'var(--warning)';
+                                            else echo 'var(--danger)';
+                                        ?>; color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.85rem;">
+                                        <?= ucfirst(htmlspecialchars($vehicle->status)) ?>
+                                    </span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else: ?>
+                <p style="color: var(--text-muted); text-align: center; padding: 2rem 0;">
+                    No vehicles assigned to this branch yet.
+                </p>
+            <?php endif; ?>
+        </div>
+    </main>
+
+</body>
+</html>

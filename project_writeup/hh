@@ -1,0 +1,42 @@
+## **MurgLogistics Management System Overview**
+
+### **What the System is All About:**
+MurgLogistics is a comprehensive web-based logistics management system that automates and streamlines shipping operations. It handles shipment creation, real-time tracking, invoice generation, and fleet management for both customers and administrators.
+
+### **System Architecture:**
+
+#### **Frontend (What Users See)**
+- **Customer Portal**: Dashboard, shipment tracking, invoice viewing
+- **Admin Dashboard**: Fleet management, staff management, reporting
+- **Technologies**: HTML5, CSS3, JavaScript, FontAwesome icons
+- **Features**: Responsive design, mobile-friendly, real-time updates
+
+#### **Backend (System Logic)**
+- **Language**: PHP 8.1
+- **Authentication**: Secure login with role-based access
+- **Business Logic**: Shipment processing, tracking updates, invoice generation
+- **Security**: SQL injection protection, password hashing, session management
+
+#### **Database (Data Storage)**
+- **System**: MySQL 8.0
+- **Design**: Relational with proper normalization
+- **Key Tables**: 
+  - `users` (customers, staff, drivers)
+  - `shipments` (package details)
+  - `tracking_history` (status updates)
+  - `vehicles` (fleet management)
+  - `branches` (locations)
+
+### **How It Works:**
+1. **Customers** register/login → create shipments → track packages → view invoices
+2. **Admins** manage fleet → assign drivers → update tracking → generate reports
+3. **System** processes data in real-time → sends notifications → maintains security
+
+### **Key Features:**
+- Real-time shipment tracking
+- Automated invoice generation
+- Multi-user role management
+- Mobile-responsive design
+- Secure data handling
+
+The system connects all three components to provide a complete logistics solution accessible via web browser on any device.
